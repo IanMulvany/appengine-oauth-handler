@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block navigation %}
+    <a href="{{ url }}">{{ url_linktext }}</a>
+{% endblock %}
+
+{% block content %}
+     {% if nickname %}
+        Hi {{ nickname }}, try connecting some of your services:
+        <p>
+            <a href="/oauth/twitter/login">Login via Twitter</a><br />
+            <a href="/oauth/yahoo/login">Login via Yahoo</a><br />
+            <a href="/oauth/mendeley/login">Login via Mendeley</a><br />
+        </p>
+    {% endif %}
+{% endblock %}

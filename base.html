@@ -1,0 +1,22 @@
+<html>
+  <head>
+    <title>Delicious2Mendley</title>
+    {% block extrahead %}{% endblock %}
+  </head>
+  <body>
+  
+    <div id="topnavigtion">
+      {% block navigation %}
+      {% endblock %}    
+    </div>
+  
+    <div id="content">
+      {% block content %}{% endblock %}
+    </div>
+    <div id="footer">
+      {% block footer %}
+        <h6>brought to you by eagleharp industries</h6>
+      {% endblock %}
+    </div>
+  </body>
+</html>

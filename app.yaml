@@ -1,0 +1,13 @@
+application: mulvanysandbox
+version: 3
+runtime: python
+api_version: 1
+
+handlers:
+- url: /.*
+  script: twitter_oauth_handler.py
+
+- url: /
+  static_dir: static
+
+
