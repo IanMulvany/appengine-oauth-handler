@@ -182,6 +182,7 @@ class OAuthClient(object):
     
         # we need to insert a callback url when we make a get_request_token call        
         logging.info("about to get_request token")
+        logging.info(self.service_info)
         self.oauth_callback = self.service_info['callback_url']
         logging.info("request params are")        
         logging.info(self.request_params)    
@@ -377,17 +378,7 @@ class OAuthClient(object):
     # cookie login/logout other cookie methods
 
     def login(self):
-    
-        # need to replace getting this info from a cookie with retrieving from a 
-        # db layer
         # the important thing is that on login we send a request to get_request_token
-
-        proxy_id = self.get_cookie()
-
-        if proxy_id:
-            return "FOO%rFF" % proxy_id
-            self.expire_cookie()
-
         return self.get_request_token()
 
 
@@ -420,7 +411,11 @@ class OAuthClient(object):
 
 class OAuthHandler(RequestHandler):
 
+
     def get(self, service, action=''):
+    
+        logging.info("in oauth handler")
+        logging.info(service)
 
         if service not in OAUTH_APP_SETTINGS:
             return self.response.out.write(
@@ -435,7 +430,11 @@ class OAuthHandler(RequestHandler):
             self.response.out.write(client.login())
 
 # ------------------------------------------------------------------------------
-# modify this demo MainHandler to suit your needs
+
+
+
+
+
 # ------------------------------------------------------------------------------
 
 class MainHandler(RequestHandler):
@@ -443,13 +442,15 @@ class MainHandler(RequestHandler):
 
     def get(self):
 
-        client = OAuthClient('twitter', self)
-
         if users.get_current_user():
             user = users.get_current_user()
             nickname = user.nickname()
             url = users.create_logout_url(self.request.uri)
             url_linktext = 'Logout'
+            #
+            # check which services this user is currently connected to 
+            # 
+            
         else:
             admin_url = None 
             admin_linktext = None                             
