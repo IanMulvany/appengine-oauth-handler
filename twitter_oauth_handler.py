@@ -86,6 +86,23 @@ OAUTH_APP_SETTINGS['twitter']['specifier_handler'] = twitter_specifier_handler
 # db entities
 # ------------------------------------------------------------------------------
 
+class UserRecord(db.Model):
+    """ a user and services that he has created connections for """
+    
+    user = db.UserProperty()
+    services = db.StringListProperty()
+    created = db.DateTimeProperty(auto_now_add=True)
+
+
+class ConnectionRecord(db.Model):
+    """ recored of a users's connection to a service """
+    
+    uid = db.StringProperty() # made of email + service
+    email = db.StringProperty()
+    service = db.StringProperty()
+    request_token_object = None 
+    access_token_object = None 
+    created = db.DateTimeProperty(auto_now_add=True)
 
 
 class OAuthRequestToken(db.Model):
@@ -211,6 +228,12 @@ class OAuthClient(object):
         # after we have got a token we have to redirect the user to
         # the page where they grant access
         
+        # if we have a request token, make a new connection object
+        
+        user = users.get_current_user()
+        email = user.email()
+        new_connection_record = ConnectionRecord()
+        
         logging.info("about to redirect to user_auth_url, this should redirect back to /callback")
         
         self.handler.redirect(self.get_signed_url(
@@ -228,6 +251,11 @@ class OAuthClient(object):
         # moved the oauth_token over to be a Text property instead
         # of a string property.
         # this was required because the returned key from Yahoo was too long
+        
+        # 
+        
+        
+        
         this_token = OAuthRequestToken.all().filter(
                     'oauth_token =', oauth_token).fetch(limit=1)[0] #pull the first result
         logging.info(this_token)
@@ -441,28 +469,43 @@ class MainHandler(RequestHandler):
     """Demo Twitter App."""
 
     def get(self):
-
+    
         if users.get_current_user():
             user = users.get_current_user()
             nickname = user.nickname()
             url = users.create_logout_url(self.request.uri)
             url_linktext = 'Logout'
-            #
-            # check which services this user is currently connected to 
-            # 
             
+            query = UserRecord.all()
+            query.filter('user =', user)
+            if query.fetch(1):
+                user_record = query.fetch(1)[0]
+                salutation = 'Welcome back ' + nickname  
+                services = user_record.services
+                if services:                   
+                    service_status = 'you are connected to ' + ''.join(services)
+                else:
+                    service_status = "you have not connected to any services yet"               
+            else:
+                new_user = UserRecord()
+                new_user.user = user 
+                new_user.put()
+                salutation = 'Hello ' + nickname + " to get started look behind you!"                
+                service_status = 'try connecting to one of these sercices:'
         else:
-            admin_url = None 
-            admin_linktext = None                             
-            nickname = None 
+            salutation = None 
+            service_status = None 
             url = users.create_login_url(self.request.uri)
             url_linktext = 'Login'
 
+    
+
         # create homepage
         template_values = {
-            'nickname': nickname,
             'url': url,
-            'url_linktext': url_linktext
+            'url_linktext': url_linktext,
+            'salutation' : salutation,
+            'service_status' : service_status 
             }
 
         path = os.path.join(os.path.dirname(__file__), 'index.html')
