@@ -71,6 +71,17 @@ def get_service_key(service, cache={}):
         service, "%s&" % encode(OAUTH_APP_SETTINGS[service]['consumer_secret'])
         )
 
+def get_this_user_record():
+    user = users.get_current_user()
+    query = UserRecord.all()
+    query.filter('user =', user)
+    if query.fetch(1):
+        user_record = query.fetch(1)[0]
+        return user_record
+    else:
+        return None 
+    
+
 def create_uuid():
     return 'id-%s' % uuid4()
 
@@ -231,7 +242,7 @@ class OAuthClient(object):
         # if we have a request token, make a new connection object
         
         user = users.get_current_user()
-        email = user.email()
+        
         new_connection_record = ConnectionRecord()
         
         logging.info("about to redirect to user_auth_url, this should redirect back to /callback")
@@ -444,6 +455,13 @@ class OAuthHandler(RequestHandler):
     
         logging.info("in oauth handler")
         logging.info(service)
+        
+        # update the user record with the service
+        user_record = get_this_user_record()
+        user_record.services = [service]
+        user_record.put()
+        
+        # create a connection record? 
 
         if service not in OAUTH_APP_SETTINGS:
             return self.response.out.write(
@@ -476,14 +494,12 @@ class MainHandler(RequestHandler):
             url = users.create_logout_url(self.request.uri)
             url_linktext = 'Logout'
             
-            query = UserRecord.all()
-            query.filter('user =', user)
-            if query.fetch(1):
-                user_record = query.fetch(1)[0]
+            user_record = get_this_user_record()
+            if user_record:
                 salutation = 'Welcome back ' + nickname  
                 services = user_record.services
                 if services:                   
-                    service_status = 'you are connected to ' + ''.join(services)
+                    service_status = 'you have tried making connections to' + ''.join(services)
                 else:
                     service_status = "you have not connected to any services yet"               
             else:
