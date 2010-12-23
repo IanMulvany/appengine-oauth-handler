@@ -1,3 +1,4 @@
+
 """
 Twitter OAuth Support for Google App Engine Apps.
 
@@ -16,6 +17,11 @@ Note: You need to be running at least version 1.1.9 of the App Engine SDK.
 
 -- 
 I hope you find this useful, tav
+
+
+#TODO: rename token objects as token objects, rather than calling them tokens
+#TODO: merge token access code, as the code is the same for both access functions
+#TODO: clean out all of the cookie code 
 
 """
 
@@ -64,6 +70,37 @@ STATIC_OAUTH_TIMESTAMP = 12345 # a workaround for clock skew/network lag
 # ------------------------------------------------------------------------------
 # utility functions
 # ------------------------------------------------------------------------------
+
+def get_services(user):
+    user_record = get_this_user_record()
+    if user_record:
+        services = user_record.services
+        return services
+    else:
+        return None
+
+def get_service_access_token(user, service):
+    # get the last connection record for that user and service 
+    try:
+        recent_connection = get_recent_connection(service) # this assumes that in the scope of the call we already have the user
+        this_token_key = recent_connection.access_token_object
+        this_token = db.get(db.Key(this_token_key))
+        access_token = this_token.oauth_token
+        return access_token
+    except:
+        return None
+     
+def get_service_auth_token(user, service):
+    # get the last connection record for that user and service 
+    try:
+        recent_connection = get_recent_connection(service) # this assumes that in the scope of the call we already have the user
+        this_token_key = recent_connection.request_token_object
+        this_token = db.get(db.Key(this_token_key))
+        auth_token = this_token.oauth_token
+        return auth_token
+    except:
+        return None
+
 
 def get_service_key(service, cache={}):
     if service in cache: return cache[service]
@@ -260,7 +297,7 @@ class OAuthClient(object):
 
         # I still have no idea what this code here is for
         if self.oauth_callback:
-             oauth_callback = {'oauth_callback': self.oauth_callback}
+            oauth_callback = {'oauth_callback': self.oauth_callback}
         else:
             oauth_callback = {}
 
@@ -330,8 +367,10 @@ class OAuthClient(object):
             key_name=key_name, service=self.service,
             **dict(token.split('=') for token in token_info.split('&'))
         )
-         
         self.token.put()
+        recent_connection.access_token_object = str(self.token.key())
+        recent_connection.put()
+        # now we need to stash a reference to the access token in the ConnectionRecord
         self.handler.redirect(return_to)
         
 
@@ -508,6 +547,28 @@ class OAuthHandler(RequestHandler):
 # ------------------------------------------------------------------------------
 
 
+class TestAPIHandler(RequestHandler):
+    """Demo Twitter App."""
+
+    def get(self):
+        user = users.get_current_user()
+        nickname = user.nickname
+        
+        services = get_services(user)
+        access_tokens = {}
+        for service in services:
+            access_tokens[service] = get_service_access_token(user, service)
+            
+        template_values = {
+            'nickname' : nickname,
+            'services' : services,
+            'tokens' : access_tokens
+        }
+        
+        path = os.path.join(os.path.dirname(__file__), 'test.html')
+        self.response.out.write(template.render(path, template_values))
+
+
 # ------------------------------------------------------------------------------
 
 class MainHandler(RequestHandler):
@@ -563,6 +624,7 @@ def main():
 
     application = WSGIApplication([
        ('/oauth/(.*)/(.*)', OAuthHandler),
+       ('/test/', TestAPIHandler),
        ('/', MainHandler)
        ], debug=True)
 
