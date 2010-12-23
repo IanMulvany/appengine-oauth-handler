@@ -19,9 +19,10 @@ Note: You need to be running at least version 1.1.9 of the App Engine SDK.
 I hope you find this useful, tav
 
 
-#TODO: rename token objects as token objects, rather than calling them tokens
-#TODO: merge token access code, as the code is the same for both access functions
-#TODO: clean out all of the cookie code 
+TODO: rename token objects as token objects, rather than calling them tokens
+TODO: merge token access code, as the code is the same for both access functions
+TODO: clean out all of the cookie code 
+TODO: make appropriate functions take user as an argument
 
 """
 
@@ -42,8 +43,6 @@ from uuid import uuid4
 from wsgiref.handlers import CGIHandler
 
 sys.path.insert(0, join_path(dirname(__file__), 'lib')) # extend sys.path
-
-#from demjson import decode as decode_json
 
 from google.appengine.api.urlfetch import fetch as urlfetch, GET, POST
 from google.appengine.ext import db
@@ -80,7 +79,7 @@ def get_services(user):
         return None
 
 def get_service_access_token(user, service):
-    # get the last connection record for that user and service 
+    """ get the last connection record for that user and service """
     try:
         recent_connection = get_recent_connection(service) # this assumes that in the scope of the call we already have the user
         this_token_key = recent_connection.access_token_object
@@ -99,8 +98,7 @@ def get_service_auth_token(user, service):
         auth_token = this_token.oauth_token
         return auth_token
     except:
-        return None
-
+        return None 
 
 def get_service_key(service, cache={}):
     if service in cache: return cache[service]
@@ -109,6 +107,7 @@ def get_service_key(service, cache={}):
         )
 
 def get_this_user_record():
+    """ for the logged in user get the record that stores which services they have tried to connect to """
     user = users.get_current_user()
     query = UserRecord.all()
     query.filter('user =', user)
@@ -119,6 +118,7 @@ def get_this_user_record():
         return None 
         
 def create_new_connection(service):
+    """ every time the user connects to a service create a record  """
     user = users.get_current_user()
     new_connection = ConnectionRecord()
     new_connection.user = user 
@@ -126,15 +126,12 @@ def create_new_connection(service):
     new_connection.put()
 
 def get_recent_connection(service):
+    """ we assume the last attempt to connect to a service for the user is the most relevant one """
     user = users.get_current_user()
-    logging.info("in get_recent_connection")
-    logging.info(user)   
-    logging.info(service)    
     query = ConnectionRecord().all()
     query.filter('user =', user).filter('service =', service).order('created')
     if query.fetch(1):
         recent_connection = query.fetch(1)[0]
-        logging.info(recent_connection)
         return recent_connection
     else:
         return None 
@@ -144,11 +141,6 @@ def create_uuid():
 
 def encode(text):
     return urlquote(str(text), '')
-
-def twitter_specifier_handler(client):
-    return client.get('/account/verify_credentials')['screen_name']
-
-OAUTH_APP_SETTINGS['twitter']['specifier_handler'] = twitter_specifier_handler
 
 # ------------------------------------------------------------------------------
 # db entities
@@ -263,37 +255,32 @@ class OAuthClient(object):
     # oauth workflow
 
     def get_request_token(self):
+        """
+        send a request to request_token_url
+        create a OAuthRequestToken
+        make a ConnectionObject        
+        redirect user to remote service user_auth_url, include a callback
+        the remove service should return us to the callback url
+        """
     
         service = self.service 
-        # we need to insert a callback url when we make a get_request_token call        
-        logging.info("about to get_request token")
-        logging.info(self.service_info)
         self.oauth_callback = self.service_info['callback_url']
-        logging.info("request params are")        
-        logging.info(self.request_params)    
         kwargs = {"oauth_callback":self.oauth_callback}
         token_info = self.get_data_from_signed_url(
             self.service_info['request_token_url'], **kwargs
             )
-            
-        logging.info("request token received into token_info")
 
         token = OAuthRequestToken(
             service=service,
             **dict(token.split('=') for token in token_info.split('&'))
             )
 
-        logging.info("local token object created")
         token.put()
         
         # if we have a request token, make a new connection object
-        logging.info('about to create a new recent connection object')
-        logging.info(token) 
         recent_connection = get_recent_connection(service)
         recent_connection.request_token_object = str(token.key())
         recent_connection.put()
-        logging.info('just added the following key')
-        logging.info(str(token.key()))
 
         # I still have no idea what this code here is for
         if self.oauth_callback:
@@ -302,43 +289,22 @@ class OAuthClient(object):
             oauth_callback = {}
 
         # after we have got a token we have to redirect the user to
-        # the page where they grant access
-        logging.info("about to redirect to user_auth_url, this should redirect back to /callback")
-        
         self.handler.redirect(self.get_signed_url(
             self.service_info['user_auth_url'], token, **oauth_callback
             ))
+            
+            
 
     def callback(self, return_to='/'):
         # for a specific token I need to find the secret
-        logging.info("in callback for service") 
-
         oauth_token = self.handler.request.get("oauth_token")
-        oauth_verifier = self.handler.request.get("oauth_verifier")
-
-        # the following fetch no longer works because we 
-        # moved the oauth_token over to be a Text property instead
-        # of a string property.
-        # this was required because the returned key from Yahoo was too long
-        
-        # 
-        
+        oauth_verifier = self.handler.request.get("oauth_verifier")        
         service = self.service
         recent_connection = get_recent_connection(service)
-        logging.info(recent_connection)
         this_token_key = recent_connection.request_token_object
-        logging.info("about to try to reference the following object by key")
-        logging.info(this_token_key)
         this_token = db.get(db.Key(this_token_key))
-        #this_token = OAuthRequestToken.all().filter(
-        #            'oauth_token =', oauth_token).fetch(limit=1)[0] #pull the first result
-        logging.info(this_token)
-        logging.info(this_token.oauth_token)   
-        logging.info(this_token.oauth_token_secret)
-        logging.info(oauth_verifier)     
-        
+
         kwargs = {"oauth_token": oauth_token, "oauth_verifier": oauth_verifier}
-        logging.info("about to request access_token_url")
         token_info = self.get_data_from_signed_url(
             self.service_info['access_token_url'], 
                                 this_token, 
@@ -353,7 +319,7 @@ class OAuthClient(object):
         # oauth_token
         # oauth_signature
         #
-        # the following are built in at the url request level
+        # the following are built in at the url request level:
         #
         # oauth_consumer_key
         # oauth_signature_method
@@ -374,51 +340,9 @@ class OAuthClient(object):
         self.handler.redirect(return_to)
         
 
-        """
-        if not oauth_token:
-            return get_request_token()
-
-        oauth_token = OAuthRequestToken.all().filter(
-            'oauth_token =', oauth_token).filter(
-            'service =', self.service).fetch(1)[0]
-
-        token_info = self.get_data_from_signed_url(
-            self.service_info['access_token_url'], oauth_token
-            )
-
-        key_name = create_uuid()
-
-        # what I need to do here is to look at the oauth_verifier=3068922909
-        # and then what do I do, 
-        # I exchange that for the access token
-        # I do this with         'access_token_url': 'http://www.mendeley.com/oauth/access_token',
-        # anything else at this point may cause problems
-        logging.info("in callbak, about to split token")
-        logging.info(token_info)
-        self.token = OAuthAccessToken(
-            key_name=key_name, service=self.service,
-            **dict(token.split('=') for token in token_info.split('&'))
-            )
-
-        if 'specifier_handler' in self.service_info:
-            specifier = self.token.specifier = self.service_info['specifier_handler'](self)
-            old = OAuthAccessToken.all().filter(
-                'specifier =', specifier).filter(
-                'service =', self.service)
-            db.delete(old)
-
-        self.token.put()
-        self.set_cookie(key_name)
-        self.handler.redirect(return_to)
-        """
-
     def cleanup(self):
-        query = OAuthRequestToken.all().filter(
-            'created <', datetime.now() - EXPIRATION_WINDOW
-            )
-        count = query.count(CLEANUP_BATCH_SIZE)
-        db.delete(query.fetch(CLEANUP_BATCH_SIZE))
-        return "Cleaned %i entries" % count
+        """ remove expired tokens """
+        do = "nothing"
 
     # request marshalling
 
