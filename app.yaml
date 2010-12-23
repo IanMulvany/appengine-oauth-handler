@@ -4,6 +4,14 @@ runtime: python
 api_version: 1
 
 handlers:
+- url: /oauth/.*
+  script: twitter_oauth_handler.py
+  login: required
+
+- url: /test/.*
+  script: twitter_oauth_handler.py
+  login: required
+
 - url: /.*
   script: twitter_oauth_handler.py
 
