@@ -80,8 +80,28 @@ def get_this_user_record():
         return user_record
     else:
         return None 
-    
+        
+def create_new_connection(service):
+    user = users.get_current_user()
+    new_connection = ConnectionRecord()
+    new_connection.user = user 
+    new_connection.service = service
+    new_connection.put()
 
+def get_recent_connection(service):
+    user = users.get_current_user()
+    logging.info("in get_recent_connection")
+    logging.info(user)   
+    logging.info(service)    
+    query = ConnectionRecord().all()
+    query.filter('user =', user).filter('service =', service).order('created')
+    if query.fetch(1):
+        recent_connection = query.fetch(1)[0]
+        logging.info(recent_connection)
+        return recent_connection
+    else:
+        return None 
+    
 def create_uuid():
     return 'id-%s' % uuid4()
 
@@ -108,11 +128,10 @@ class UserRecord(db.Model):
 class ConnectionRecord(db.Model):
     """ recored of a users's connection to a service """
     
-    uid = db.StringProperty() # made of email + service
-    email = db.StringProperty()
+    user = db.UserProperty()
     service = db.StringProperty()
-    request_token_object = None 
-    access_token_object = None 
+    request_token_object = db.StringProperty() 
+    access_token_object = db.StringProperty() 
     created = db.DateTimeProperty(auto_now_add=True)
 
 
@@ -208,6 +227,7 @@ class OAuthClient(object):
 
     def get_request_token(self):
     
+        service = self.service 
         # we need to insert a callback url when we make a get_request_token call        
         logging.info("about to get_request token")
         logging.info(self.service_info)
@@ -222,15 +242,23 @@ class OAuthClient(object):
         logging.info("request token received into token_info")
 
         token = OAuthRequestToken(
-            service=self.service,
+            service=service,
             **dict(token.split('=') for token in token_info.split('&'))
             )
 
         logging.info("local token object created")
-
         token.put()
+        
+        # if we have a request token, make a new connection object
+        logging.info('about to create a new recent connection object')
+        logging.info(token) 
+        recent_connection = get_recent_connection(service)
+        recent_connection.request_token_object = str(token.key())
+        recent_connection.put()
+        logging.info('just added the following key')
+        logging.info(str(token.key()))
 
-        # I have no idea what this code here is for
+        # I still have no idea what this code here is for
         if self.oauth_callback:
              oauth_callback = {'oauth_callback': self.oauth_callback}
         else:
@@ -238,13 +266,6 @@ class OAuthClient(object):
 
         # after we have got a token we have to redirect the user to
         # the page where they grant access
-        
-        # if we have a request token, make a new connection object
-        
-        user = users.get_current_user()
-        
-        new_connection_record = ConnectionRecord()
-        
         logging.info("about to redirect to user_auth_url, this should redirect back to /callback")
         
         self.handler.redirect(self.get_signed_url(
@@ -265,16 +286,19 @@ class OAuthClient(object):
         
         # 
         
-        
-        
-        this_token = OAuthRequestToken.all().filter(
-                    'oauth_token =', oauth_token).fetch(limit=1)[0] #pull the first result
+        service = self.service
+        recent_connection = get_recent_connection(service)
+        logging.info(recent_connection)
+        this_token_key = recent_connection.request_token_object
+        logging.info("about to try to reference the following object by key")
+        logging.info(this_token_key)
+        this_token = db.get(db.Key(this_token_key))
+        #this_token = OAuthRequestToken.all().filter(
+        #            'oauth_token =', oauth_token).fetch(limit=1)[0] #pull the first result
         logging.info(this_token)
         logging.info(this_token.oauth_token)   
         logging.info(this_token.oauth_token_secret)
-        logging.info(oauth_token)
         logging.info(oauth_verifier)     
-        
         
         kwargs = {"oauth_token": oauth_token, "oauth_verifier": oauth_verifier}
         logging.info("about to request access_token_url")
@@ -458,10 +482,16 @@ class OAuthHandler(RequestHandler):
         
         # update the user record with the service
         user_record = get_this_user_record()
-        user_record.services = [service]
+        if user_record.services:
+            services = user_record.services
+        else:
+            services = []
+            user_record.services = services
+        if service not in services: user_record.services.append(service)
         user_record.put()
-        
+                
         # create a connection record? 
+        create_new_connection(service)
 
         if service not in OAUTH_APP_SETTINGS:
             return self.response.out.write(
@@ -476,9 +506,6 @@ class OAuthHandler(RequestHandler):
             self.response.out.write(client.login())
 
 # ------------------------------------------------------------------------------
-
-
-
 
 
 # ------------------------------------------------------------------------------
@@ -499,7 +526,7 @@ class MainHandler(RequestHandler):
                 salutation = 'Welcome back ' + nickname  
                 services = user_record.services
                 if services:                   
-                    service_status = 'you have tried making connections to' + ''.join(services)
+                    service_status = 'you have tried making connections to: ' + ', '.join(services)
                 else:
                     service_status = "you have not connected to any services yet"               
             else:
@@ -507,7 +534,8 @@ class MainHandler(RequestHandler):
                 new_user.user = user 
                 new_user.put()
                 salutation = 'Hello ' + nickname + " to get started look behind you!"                
-                service_status = 'try connecting to one of these sercices:'
+                service_status = 'try connecting to one of these services:'
+
         else:
             salutation = None 
             service_status = None 
