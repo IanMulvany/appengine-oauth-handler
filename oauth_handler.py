@@ -60,119 +60,20 @@ STATIC_OAUTH_TIMESTAMP = 12345 # a workaround for clock skew/network lag
 # ------------------------------------------------------------------------------
 # utility functions
 # ------------------------------------------------------------------------------
-
-def get_services(user):
-    "lists the names of the services a user has connected to"
-    user_record = get_this_user_record()
-    if user_record:
-        services = user_record.services
-        return services
-    else:
-        return None
-
-def get_service_access_token(user, service):
-    """ get the last connection record for that user and service """
-    try:
-        recent_connection = get_recent_connection(service) # this assumes that in the scope of the call we already have the user
-        this_token_key = recent_connection.access_token_object
-        this_token = db.get(db.Key(this_token_key))
-        access_token = this_token.oauth_token
-        return access_token
-    except:
-        return None
-     
-def get_service_auth_token(user, service):
-    # get the last connection record for that user and service 
-    try:
-        recent_connection = get_recent_connection(service) # this assumes that in the scope of the call we already have the user
-        this_token_key = recent_connection.request_token_object
-        this_token = db.get(db.Key(this_token_key))
-        auth_token = this_token.oauth_token
-        return auth_token
-    except:
-        return None 
-
-def get_service_key(service, cache={}):
-    if service in cache: return cache[service]
-    return cache.setdefault(
-        service, "%s&" % encode(OAUTH_APP_SETTINGS[service]['consumer_secret'])
-        )
-
-def get_this_user_record():
-    """ for the logged in user get the record that stores which services they have tried to connect to """
-    user = users.get_current_user()
-    query = UserRecord.all()
-    query.filter('user =', user)
-    if query.fetch(1):
-        user_record = query.fetch(1)[0]
-        return user_record
-    else:
-        return None 
-        
-def create_new_connection(service):
-    """ every time the user connects to a service create a record  """
-    user = users.get_current_user()
-    new_connection = ConnectionRecord()
-    new_connection.user = user 
-    new_connection.service = service
-    new_connection.put()
-
-def get_recent_connection(service):
-    """ we assume the last attempt to connect to a service for the user is the most relevant one """
-    user = users.get_current_user()
-    query = ConnectionRecord().all()
-    query.filter('user =', user).filter('service =', service).order('created')
-    if query.fetch(1):
-        recent_connection = query.fetch(1)[0]
-        return recent_connection
-    else:
-        return None 
-    
+   
+from oauth_utilities import *
+   
 def create_uuid():
     return 'id-%s' % uuid4()
 
 def encode(text):
     return urlquote(str(text), '')
 
-# ------------------------------------------------------------------------------
-# db entities
-# ------------------------------------------------------------------------------
+#-------
+# oauth model
+#-------
 
-class UserRecord(db.Model):
-    """ a user and services that he has created connections for """
-    
-    user = db.UserProperty()
-    services = db.StringListProperty()
-    created = db.DateTimeProperty(auto_now_add=True)
-
-
-class ConnectionRecord(db.Model):
-    """ recored of a users's connection to a service """
-    
-    user = db.UserProperty()
-    service = db.StringProperty()
-    request_token_object = db.StringProperty() 
-    access_token_object = db.StringProperty() 
-    created = db.DateTimeProperty(auto_now_add=True)
-
-
-class OAuthRequestToken(db.Model):
-    """OAuth Request Token."""
-
-    service = db.StringProperty()
-    oauth_token = db.TextProperty()
-    oauth_token_secret = db.StringProperty()
-    created = db.DateTimeProperty(auto_now_add=True)
-
-
-class OAuthAccessToken(db.Model):
-    """OAuth Access Token."""
-    
-    service = db.StringProperty()
-    specifier = db.StringProperty()
-    oauth_token = db.TextProperty()
-    oauth_token_secret = db.StringProperty()
-    created = db.DateTimeProperty(auto_now_add=True)
+from oauth_model import *
 
 # ------------------------------------------------------------------------------
 # oauth client
@@ -392,7 +293,6 @@ class OAuthClient(object):
 
 class OAuthHandler(RequestHandler):
 
-
     def get(self, service, action=''):
     
         logging.info("in oauth handler")
@@ -447,51 +347,6 @@ class TestAPIHandler(RequestHandler):
         self.response.out.write(template.render(path, template_values))
 
 # ------------------------------------------------------------------------------
-
-class MainHandler(RequestHandler):
-    """Demo Twitter App."""
-
-    def get(self):
-    
-        if users.get_current_user():
-            user = users.get_current_user()
-            nickname = user.nickname()
-            url = users.create_logout_url(self.request.uri)
-            url_linktext = 'Logout'
-            
-            user_record = get_this_user_record()
-            if user_record:
-                salutation = 'Welcome back ' + nickname  
-                services = user_record.services
-                if services:                   
-                    service_status = 'you have tried making connections to: ' + ', '.join(services)
-                else:
-                    service_status = "you have not connected to any services yet"               
-            else:
-                new_user = UserRecord()
-                new_user.user = user 
-                new_user.put()
-                salutation = 'Hello ' + nickname + " to get started look behind you!"                
-                service_status = 'try connecting to one of these services:'
-
-        else:
-            salutation = None 
-            service_status = None 
-            url = users.create_login_url(self.request.uri)
-            url_linktext = 'Login'
-
-        # create homepage
-        template_values = {
-            'url': url,
-            'url_linktext': url_linktext,
-            'salutation' : salutation,
-            'service_status' : service_status 
-            }
-
-        path = os.path.join(os.path.dirname(__file__), 'index.html')
-        self.response.out.write(template.render(path, template_values))
-
-# ------------------------------------------------------------------------------
 # self runner -- gae cached main() function
 # ------------------------------------------------------------------------------
 
@@ -499,8 +354,7 @@ def main():
 
     application = WSGIApplication([
        ('/oauth/(.*)/(.*)', OAuthHandler),
-       ('/test/', TestAPIHandler),
-       ('/', MainHandler)
+       ('/test/', TestAPIHandler)
        ], debug=True)
 
     CGIHandler().run(application)
