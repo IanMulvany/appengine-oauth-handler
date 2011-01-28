@@ -2,6 +2,7 @@ from google.appengine.api import users
 from oauth_model import *
 from oauth_service_config import OAUTH_APP_SETTINGS
 from urllib import urlencode, quote as urlquote
+from uuid import uuid4
    
 def create_uuid():
     return 'id-%s' % uuid4()
