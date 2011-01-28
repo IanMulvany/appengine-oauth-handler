@@ -5,15 +5,15 @@ api_version: 1
 
 handlers:
 - url: /oauth/.*
-  script: twitter_oauth_handler.py
+  script: oauth_handler.py
   login: required
 
 - url: /test/.*
-  script: twitter_oauth_handler.py
+  script: oauth_handler.py
   login: required
 
 - url: /.*
-  script: twitter_oauth_handler.py
+  script: oauth_handler.py
 
 - url: /
   static_dir: static
