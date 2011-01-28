@@ -55,15 +55,6 @@ from google.appengine.ext.webapp import template
 # ------------------------------------------------------------------------------
 
 from oauth_service_config import OAUTH_APP_SETTINGS
-
-CLEANUP_BATCH_SIZE = 100
-EXPIRATION_WINDOW = timedelta(seconds=60*60*1) # 1 hour
-
-try:
-    from config import OAUTH_APP_SETTINGS
-except:
-    pass
-
 STATIC_OAUTH_TIMESTAMP = 12345 # a workaround for clock skew/network lag
 
 # ------------------------------------------------------------------------------
@@ -71,6 +62,7 @@ STATIC_OAUTH_TIMESTAMP = 12345 # a workaround for clock skew/network lag
 # ------------------------------------------------------------------------------
 
 def get_services(user):
+    "lists the names of the services a user has connected to"
     user_record = get_this_user_record()
     if user_record:
         services = user_record.services
@@ -190,8 +182,7 @@ class OAuthClient(object):
 
     __public__ = ('callback', 'cleanup', 'login', 'logout')
     """ 
-    we insert the callback paramater as one of the request params dicts
-    in any case, it's specific to one call, and one call only.
+    we insert the callback parameter as one of the request params dicts
     
     """
 
@@ -291,9 +282,7 @@ class OAuthClient(object):
         # after we have got a token we have to redirect the user to
         self.handler.redirect(self.get_signed_url(
             self.service_info['user_auth_url'], token, **oauth_callback
-            ))
-            
-            
+            ))     
 
     def callback(self, return_to='/'):
         # for a specific token I need to find the secret
@@ -339,13 +328,7 @@ class OAuthClient(object):
         # now we need to stash a reference to the access token in the ConnectionRecord
         self.handler.redirect(return_to)
         
-
-    def cleanup(self):
-        """ remove expired tokens """
-        do = "nothing"
-
     # request marshalling
-
     def get_data_from_signed_url(self, __url, __token=None, __meth='GET', **extra_params):
         remote_response = urlfetch(self.get_signed_url(
             __url, __token, __meth, **extra_params
@@ -363,8 +346,6 @@ class OAuthClient(object):
 
     def get_signed_body(self, __url, __token=None, __meth='GET',**extra_params):
         service_info = self.service_info
-        
-        #logging.info(self.service_info)
 
         kwargs = {
             'oauth_consumer_key': service_info['consumer_key'],
@@ -397,39 +378,13 @@ class OAuthClient(object):
 
         return urlencode(kwargs)
 
-    # who stole the cookie from the cookie jar?
-    # we should store this info in a db object, and not in a cookie
-    # cookies are bad, bad cookie. 
-    
-    # cookie login/logout other cookie methods
-
+    # cookie login/logout other cookie methods, should now be redundant, um, I think
     def login(self):
         # the important thing is that on login we send a request to get_request_token
         return self.get_request_token()
 
-
     def logout(self, return_to='/'):
-        self.expire_cookie()
         self.handler.redirect(self.handler.request.get("return_to", return_to))
-
-    def get_cookie(self):
-        return self.handler.request.cookies.get(
-            'oauth.%s' % self.service, ''
-            )
-
-    def set_cookie(self, value, path='/'):
-        self.handler.response.headers.add_header(
-            'Set-Cookie', 
-            '%s=%s; path=%s; expires="Fri, 31-Dec-2021 23:59:59 GMT"' %
-            ('oauth.%s' % self.service, value, path)
-            )
-
-    def expire_cookie(self, path='/'):
-        self.handler.response.headers.add_header(
-            'Set-Cookie', 
-            '%s=; path=%s; expires="Fri, 31-Dec-1999 23:59:59 GMT"' %
-            ('oauth.%s' % self.service, path)
-            )
 
 # ------------------------------------------------------------------------------
 # oauth handler
@@ -470,7 +425,6 @@ class OAuthHandler(RequestHandler):
 
 # ------------------------------------------------------------------------------
 
-
 class TestAPIHandler(RequestHandler):
     """Demo Twitter App."""
 
@@ -491,7 +445,6 @@ class TestAPIHandler(RequestHandler):
         
         path = os.path.join(os.path.dirname(__file__), 'test.html')
         self.response.out.write(template.render(path, template_values))
-
 
 # ------------------------------------------------------------------------------
 
@@ -526,8 +479,6 @@ class MainHandler(RequestHandler):
             service_status = None 
             url = users.create_login_url(self.request.uri)
             url_linktext = 'Login'
-
-    
 
         # create homepage
         template_values = {
