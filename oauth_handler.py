@@ -63,12 +63,6 @@ STATIC_OAUTH_TIMESTAMP = 12345 # a workaround for clock skew/network lag
    
 from oauth_utilities import *
    
-def create_uuid():
-    return 'id-%s' % uuid4()
-
-def encode(text):
-    return urlquote(str(text), '')
-
 #-------
 # oauth model
 #-------
