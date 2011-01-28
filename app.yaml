@@ -13,7 +13,7 @@ handlers:
   login: required
 
 - url: /.*
-  script: oauth_handler.py
+  script: main.py
 
 - url: /
   static_dir: static
